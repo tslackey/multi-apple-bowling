@@ -1,0 +1,5 @@
+{
+  "name": "Multi Platform Bowling (Swift on Linux)",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh"
+}
