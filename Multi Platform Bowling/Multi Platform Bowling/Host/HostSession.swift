@@ -12,6 +12,7 @@ final class HostSession {
     var lastPinfall: Int?
     var connectedName: String?
     var phase: GamePhase = .lobby
+    var joinCode: HostJoinCode?
 
     var onThrow: ((ThrowCommit) -> Void)?
     var onResetLane: (() -> Void)?
@@ -21,6 +22,7 @@ final class HostSession {
     private var connectionGeneration = 0
     private var state = GameState()
     private let hostName = PlatformIdentity.hostDisplayName
+    private let sessionID = UUID()
 
     var overlayTitle: String {
         switch phase {
@@ -56,8 +58,8 @@ final class HostSession {
                     self?.accept(connection)
                 }
             }
-            listener.start(queue: .main)
             self.listener = listener
+            listener.start(queue: .main)
             statusText = "Advertising as \(hostName)"
         } catch {
             statusText = "Could not start host: \(error.localizedDescription)"
@@ -112,7 +114,10 @@ final class HostSession {
     private func handleListener(_ listenerState: NWListener.State) {
         switch listenerState {
         case .ready:
-            statusText = "Waiting for iPhone on the local network…"
+            if let port = listener?.port?.rawValue {
+                refreshJoinCode(port: port)
+            }
+            statusText = "Scan the QR with iPhone, or wait for Bonjour…"
         case .failed(let error):
             statusText = "Listener failed: \(error.localizedDescription)"
         default:
@@ -185,6 +190,15 @@ final class HostSession {
     private func sendSnapshot() {
         let snapshot = GameSnapshot(state: state, hostName: hostName)
         channel?.send(.snapshot(snapshot))
+    }
+
+    private func refreshJoinCode(port: UInt16) {
+        joinCode = HostJoinCode(
+            serviceName: listener?.service?.name ?? hostName,
+            port: port,
+            addresses: LocalLinkAddresses.ipv4(),
+            sessionID: sessionID
+        )
     }
 }
 #endif

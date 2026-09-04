@@ -29,6 +29,8 @@ final class ControllerSession {
     private var channel: ConnectionChannel?
     private var joinGeneration = 0
     private var joinRetryCount = 0
+    private var joinQueue: [NWEndpoint] = []
+    private var joinQueueIndex = 0
 
     func startBrowsing() {
         stopBrowsing()
@@ -68,7 +70,31 @@ final class ControllerSession {
     }
 
     func join(_ host: DiscoveredHost) {
+        joinQueue = [host.endpoint]
+        joinQueueIndex = 0
         join(host, isRetry: false)
+    }
+
+    func join(code: HostJoinCode) {
+        var endpoints: [NWEndpoint] = []
+        if let port = NWEndpoint.Port(rawValue: code.port) {
+            for address in code.addresses {
+                endpoints.append(.hostPort(host: NWEndpoint.Host(address), port: port))
+            }
+        }
+        endpoints.append(
+            .service(name: code.serviceName, type: BonjourService.type, domain: "local.", interface: nil)
+        )
+        joinQueue = endpoints
+        joinQueueIndex = 0
+        join(
+            DiscoveredHost(
+                id: code.sessionID.uuidString,
+                name: code.serviceName,
+                endpoint: endpoints[0]
+            ),
+            isRetry: false
+        )
     }
 
     func send(_ message: NetworkMessage) {
@@ -110,6 +136,9 @@ final class ControllerSession {
         }
         next.onFailed = { [weak self] message in
             guard let self, self.joinGeneration == generation else { return }
+            if self.advanceJoinQueue(from: host) {
+                return
+            }
             self.handleDisconnect(message)
         }
         next.onMessage = { [weak self] message in
@@ -127,6 +156,9 @@ final class ControllerSession {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(5))
             guard joinGeneration == generation, !isConnected else { return }
+            if advanceJoinQueue(from: host) {
+                return
+            }
             if joinRetryCount < 1 {
                 joinRetryCount += 1
                 join(host, isRetry: true)
@@ -139,6 +171,20 @@ final class ControllerSession {
             statusText = "Could not connect to \(host.name). Tap it to try again."
             startBrowsing()
         }
+    }
+
+    private func advanceJoinQueue(from host: DiscoveredHost) -> Bool {
+        guard joinQueueIndex + 1 < joinQueue.count else { return false }
+        joinQueueIndex += 1
+        join(
+            DiscoveredHost(
+                id: host.id,
+                name: host.name,
+                endpoint: joinQueue[joinQueueIndex]
+            ),
+            isRetry: true
+        )
+        return true
     }
 
     private func handleDisconnect(_ message: String) {

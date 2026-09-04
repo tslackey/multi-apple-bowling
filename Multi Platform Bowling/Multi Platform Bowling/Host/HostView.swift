@@ -16,7 +16,14 @@ struct HostView: View {
             VStack {
                 header
                 Spacer()
-                controls
+                HStack(alignment: .bottom) {
+                    controls
+                    Spacer()
+                    JoinQRView(
+                        payload: session.joinCode?.urlString,
+                        dimension: session.connectedName == nil ? 240 : 132
+                    )
+                }
             }
             .padding(24)
         }

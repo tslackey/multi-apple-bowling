@@ -7,10 +7,15 @@ struct ControllerView: View {
     @State private var session = ControllerSession()
     @State private var motion = MotionSource()
     @State private var detector = ThrowDetector(playerID: UUID())
+    @State private var anchorSession = LaneAnchorSession()
+    @State private var throwMode: ThrowReleaseMode = .automatic
     @State private var debugPower = 0.7
     @State private var debugHook = 0.0
     @State private var lastThrowStatus = "Hold the phone upright and swing forward."
     @State private var showDebug = false
+    @State private var showScanner = false
+    @State private var holdPressed = false
+    @State private var lastMotion: ControllerInput?
 
     var body: some View {
         NavigationStack {
@@ -23,6 +28,7 @@ struct ControllerView: View {
                         throwCard
                         debugCard
                     } else {
+                        scanButton
                         hostList
                     }
                 }
@@ -31,25 +37,46 @@ struct ControllerView: View {
             .navigationTitle("Bowling Remote")
         }
         .preferredColorScheme(.dark)
+        .fullScreenCover(isPresented: $showScanner) {
+            QRScannerView(session: anchorSession) {
+                showScanner = false
+                anchorSession.stopScanning()
+            }
+        }
         .onAppear {
             detector.playerID = session.playerID
             session.startBrowsing()
             motion.onSample = handleMotion
+            anchorSession.onCode = handleScannedCode
         }
         .onDisappear {
             motion.stop()
             session.disconnect()
             session.stopBrowsing()
+            anchorSession.stop()
         }
         .onChange(of: session.isConnected) { _, connected in
             if connected {
                 detector.reset()
-                lastThrowStatus = "Hold the phone upright and swing forward."
+                lastThrowStatus = throwMode == .holdToThrow
+                    ? "Press and hold, swing, then release."
+                    : "Hold the phone upright and swing forward."
                 motion.start()
             } else {
                 motion.stop()
                 detector.reset()
+                if !showScanner {
+                    anchorSession.stop()
+                }
             }
+        }
+        .onChange(of: throwMode) { _, mode in
+            detector.releaseMode = mode
+            detector.reset()
+            holdPressed = false
+            lastThrowStatus = mode == .holdToThrow
+                ? "Press and hold, swing, then release."
+                : "Hold the phone upright and swing forward."
         }
     }
 
@@ -71,6 +98,13 @@ struct ControllerView: View {
             } else if !motion.isAvailable {
                 Text("No gyro on this device — use Throw now.")
                     .foregroundStyle(.orange)
+            }
+            if session.isConnected {
+                Text(anchorSession.isLocked
+                     ? "Aim locked to the host screen"
+                     : "Scan the host QR to lock 3D aim")
+                    .font(.subheadline)
+                    .foregroundStyle(anchorSession.isLocked ? .green : .secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -95,13 +129,24 @@ struct ControllerView: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
 
+    private var scanButton: some View {
+        Button {
+            showScanner = true
+        } label: {
+            Label("Scan host QR", systemImage: "qrcode.viewfinder")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+    }
+
     private var hostList: some View {
         Group {
             if session.hosts.isEmpty {
                 ContentUnavailableView(
                     "No games nearby",
                     systemImage: "wifi",
-                    description: Text("Start the host on a Mac or Apple TV on this Wi-Fi.")
+                    description: Text("Scan the QR on the Mac or Apple TV, or start a host on this Wi-Fi.")
                 )
             } else {
                 VStack(spacing: 0) {
@@ -134,30 +179,76 @@ struct ControllerView: View {
             Text(aimingCopy)
                 .font(.title3.bold())
                 .multilineTextAlignment(.center)
-            Text("Portrait, screen toward you, top of the phone aimed at the pins. Swing like a Wii Remote.")
+            Text(throwMode == .holdToThrow
+                 ? "Portrait, screen toward you, top aimed at the pins. Hold, swing, release."
+                 : "Portrait, screen toward you, top of the phone aimed at the pins. Swing like a Wii Remote.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
+            Picker("Throw mode", selection: $throwMode) {
+                Text("Swing").tag(ThrowReleaseMode.automatic)
+                Text("Hold & release").tag(ThrowReleaseMode.holdToThrow)
+            }
+            .pickerStyle(.segmented)
+
             swingMeter
+            aimMeter
 
             Text(lastThrowStatus)
                 .font(.callout)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
-            Button("Throw now") {
-                sendManualRelease()
+            if throwMode == .holdToThrow {
+                holdToThrowPad
+            } else {
+                Button("Throw now") {
+                    sendManualRelease()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!canThrow)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(!canThrow)
+
+            Button {
+                showScanner = true
+            } label: {
+                Label(
+                    anchorSession.isLocked ? "Rescan aim QR" : "Scan QR to lock aim",
+                    systemImage: "qrcode.viewfinder"
+                )
+            }
+            .buttonStyle(.bordered)
 
             Button("Disconnect", role: .destructive, action: session.disconnect)
         }
         .padding()
         .frame(maxWidth: .infinity)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var holdToThrowPad: some View {
+        Text(holdPressed ? "Release to throw" : "Hold • Swing • Release")
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 28)
+            .background(holdPressed ? Color.green.opacity(0.85) : Color.accentColor)
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .opacity(canThrow ? 1 : 0.45)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        guard canThrow, !holdPressed else { return }
+                        setHoldPressed(true)
+                    }
+                    .onEnded { _ in
+                        setHoldPressed(false)
+                    }
+            )
+            .disabled(!canThrow)
+            .accessibilityAddTraits(.isButton)
     }
 
     private var swingMeter: some View {
@@ -172,6 +263,32 @@ struct ControllerView: View {
                     Capsule()
                         .fill(meterColor)
                         .frame(width: max(8, geo.size.width * motion.swingLevel))
+                }
+            }
+            .frame(height: 14)
+        }
+    }
+
+    private var aimMeter: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(anchorSession.isLocked ? "Aim vs screen" : "Aim (gyro only)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            GeometryReader { geo in
+                let heading = anchorSession.currentAim?.heading ?? 0
+                let x = geo.size.width / 2
+                    + CGFloat(heading / ThrowMapper.maxHeading) * (geo.size.width / 2 - 8)
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(.white.opacity(0.12))
+                    Rectangle()
+                        .fill(.white.opacity(0.35))
+                        .frame(width: 2, height: 14)
+                        .offset(x: geo.size.width / 2 - 1)
+                    Circle()
+                        .fill(anchorSession.isLocked ? Color.green : Color.accentColor)
+                        .frame(width: 14, height: 14)
+                        .offset(x: max(0, min(geo.size.width - 14, x - 7)))
                 }
             }
             .frame(height: 14)
@@ -228,22 +345,61 @@ struct ControllerView: View {
         motion.swingLevel > 0.55 ? .green : .accentColor
     }
 
+    private func handleScannedCode(_ code: HostJoinCode) {
+        showScanner = false
+        if !session.isConnected, !session.isJoining {
+            session.join(code: code)
+        }
+    }
+
     private func handleMotion(_ input: ControllerInput) {
         guard session.isConnected else { return }
-        guard canThrow, let commit = detector.ingest(input) else { return }
+        var sample = input
+        sample.buttonA = throwMode == .holdToThrow && holdPressed
+        lastMotion = sample
+        anchorSession.latestYaw = sample.attitude.yaw
+        guard canThrow, let commit = detector.ingest(sample, aim: currentAim) else { return }
         send(commit)
         lastThrowStatus = "Swing sent — watch the Mac"
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
     }
 
+    private func setHoldPressed(_ pressed: Bool) {
+        guard throwMode == .holdToThrow else { return }
+        if pressed {
+            holdPressed = true
+            lastThrowStatus = "Holding — swing, then release"
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            return
+        }
+        holdPressed = false
+        var sample = lastMotion ?? ControllerInput(
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            attitude: .zero,
+            userAcceleration: .zero,
+            buttonA: false
+        )
+        sample.buttonA = false
+        sample.timestamp = ProcessInfo.processInfo.systemUptime
+        if canThrow, let commit = detector.ingest(sample, aim: currentAim) {
+            send(commit)
+            lastThrowStatus = "Throw sent — watch the Mac"
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        }
+    }
+
+    private var currentAim: LaneAim? {
+        anchorSession.currentAim
+    }
+
     private func sendManualRelease() {
         var input = ControllerInput(
             timestamp: ProcessInfo.processInfo.systemUptime,
-            attitude: .zero,
+            attitude: lastMotion?.attitude ?? .zero,
             userAcceleration: Acceleration(x: 0, y: 2.2, z: 0),
             buttonA: true
         )
-        if let commit = detector.ingest(input) {
+        if let commit = detector.ingest(input, aim: currentAim) {
             send(commit)
             lastThrowStatus = "Throw sent — watch the Mac"
         } else {
@@ -252,7 +408,7 @@ struct ControllerView: View {
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         input.buttonA = false
-        _ = detector.ingest(input)
+        _ = detector.ingest(input, aim: currentAim)
     }
 
     private func sendDebugThrow() {

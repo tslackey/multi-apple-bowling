@@ -2,7 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSBonjourServices</key>
+    <key>NSCameraUsageDescription</key>
+    <string>The camera scans the host QR code to join the game and lock a 3D aim point on the screen.</string>
+    <key>NSBonjourServices</key>
 	<array>
 		<string>_multiapplebowling._tcp</string>
 	</array>

@@ -14,18 +14,29 @@ public enum ThrowMapper: Sendable {
         playerID: UUID,
         peakForwardAcceleration: Double,
         attitude: Attitude,
-        timestamp: TimeInterval
+        timestamp: TimeInterval,
+        aim: LaneAim? = nil
     ) -> ThrowCommit {
         let normalized = saturate((peakForwardAcceleration - 0.9) / 3.2)
         let speed = minSpeed + (maxSpeed - minSpeed) * normalized
-        let heading = clamp(attitude.yaw * 0.65, -maxHeading, maxHeading)
+        let heading = clamp(
+            aim?.heading ?? (attitude.yaw * 0.65),
+            -maxHeading,
+            maxHeading
+        )
         let sideSpin = clamp(attitude.roll * 2.8, -8, 8)
+        let approachOffset = clamp(
+            aim?.approachOffset ?? 0,
+            -LaneAimSolver.maxApproachOffset,
+            LaneAimSolver.maxApproachOffset
+        )
         return ThrowCommit(
             playerID: playerID,
             speed: speed,
             heading: heading,
             sideSpin: sideSpin,
-            timestamp: timestamp
+            timestamp: timestamp,
+            approachOffset: approachOffset
         )
     }
 

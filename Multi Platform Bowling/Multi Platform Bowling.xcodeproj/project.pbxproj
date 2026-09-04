@@ -14,6 +14,16 @@
 		DC0CE716304B02D100B156E9 /* Multi Platform Bowling.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Multi Platform Bowling.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		DC0CE733304B02D100B156E9 /* Exceptions for "Multi Platform Bowling" folder in "Multi Platform Bowling" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DC0CE715304B02D100B156E9 /* Multi Platform Bowling */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		DC0CE718304B02D100B156E9 /* Multi Platform Bowling */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -22,14 +32,6 @@
 			);
 			path = "Multi Platform Bowling";
 			sourceTree = "<group>";
-		};
-		DC0CE733304B02D100B156E9 /* Exceptions for "Multi Platform Bowling" folder in "Multi Platform Bowling" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-				Mac.entitlements,
-			);
-			target = DC0CE715304B02D100B156E9 /* Multi Platform Bowling */;
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
@@ -277,6 +279,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Multi Platform Bowling/Info.plist";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Multi Platform Bowling uses the local network so your iPhone can control the game on a Mac or Apple TV.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera scans the host QR code to join the game and lock a 3D aim point on the screen.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -325,6 +328,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Multi Platform Bowling/Info.plist";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Multi Platform Bowling uses the local network so your iPhone can control the game on a Mac or Apple TV.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera scans the host QR code to join the game and lock a 3D aim point on the screen.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
