@@ -50,4 +50,10 @@ League Night is real-world scaled (1 unit = 1 metre) and ships GLB, which is the
 3. Export USDZ (or USDA + textures) and add those to the Xcode target.
 4. Load with `Entity(named:)` / `ModelEntity.load(named:)`.
 
-GLB/FBX will not load directly in RealityKit.
+GLB/FBX will not load directly in RealityKit. Convert with:
+
+```text
+make assets
+```
+
+That writes `Multi Platform Bowling/Multi Platform Bowling/Resources/LeagueNight.usdz` for the Mac/tvOS host. The CC0Tree ball FBX is still source-only; gameplay uses a RealityKit sphere sized to match (~0.216 m diameter).
