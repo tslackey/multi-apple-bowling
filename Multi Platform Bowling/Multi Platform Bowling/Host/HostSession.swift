@@ -18,6 +18,7 @@ final class HostSession {
 
     private var listener: NWListener?
     private var channel: ConnectionChannel?
+    private var connectionGeneration = 0
     private var state = GameState()
     private let hostName = PlatformIdentity.hostDisplayName
 
@@ -43,7 +44,7 @@ final class HostSession {
         state = GameState(phase: .lobby, pinsStanding: 10)
         phase = .lobby
         do {
-            let listener = try NWListener(using: BowlingNetwork.parameters)
+            let listener = try NWListener(using: BowlingNetwork.parameters())
             listener.service = NWListener.Service(name: hostName, type: BonjourService.type)
             listener.stateUpdateHandler = { [weak self] listenerState in
                 Task { @MainActor in
@@ -64,6 +65,7 @@ final class HostSession {
     }
 
     func stop() {
+        connectionGeneration += 1
         channel?.cancel()
         channel = nil
         listener?.cancel()
@@ -119,19 +121,24 @@ final class HostSession {
     }
 
     private func accept(_ connection: NWConnection) {
-        if channel != nil {
-            connection.cancel()
-            return
-        }
+        connectionGeneration += 1
+        let generation = connectionGeneration
+        channel?.cancel()
+
         let next = ConnectionChannel(connection: connection)
         next.onReady = { [weak self] in
-            self?.statusText = "iPhone connected — waiting to join"
+            guard let self, self.connectionGeneration == generation else { return }
+            if self.connectedName == nil {
+                self.statusText = "iPhone connected — waiting to join"
+            }
         }
         next.onFailed = { [weak self] message in
-            self?.dropConnection(message)
+            guard let self, self.connectionGeneration == generation else { return }
+            self.dropConnection(message)
         }
         next.onMessage = { [weak self] message in
-            self?.handle(message)
+            guard let self, self.connectionGeneration == generation else { return }
+            self.handle(message)
         }
         channel = next
         next.start()
@@ -165,6 +172,7 @@ final class HostSession {
     }
 
     private func dropConnection(_ message: String) {
+        connectionGeneration += 1
         channel?.cancel()
         channel = nil
         connectedName = nil
@@ -172,7 +180,6 @@ final class HostSession {
         state.phase = .lobby
         phase = .lobby
         statusText = message
-        sendSnapshot()
     }
 
     private func sendSnapshot() {

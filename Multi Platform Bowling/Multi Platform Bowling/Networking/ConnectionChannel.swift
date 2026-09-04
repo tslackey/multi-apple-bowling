@@ -3,12 +3,16 @@ import Network
 import BowlingGameCore
 
 enum BowlingNetwork {
-    static let parameters: NWParameters = {
-        let parameters = NWParameters.tcp
+    static func parameters() -> NWParameters {
+        let tcp = NWProtocolTCP.Options()
+        tcp.noDelay = true
+        tcp.enableKeepalive = true
+        tcp.keepaliveIdle = 5
+        let parameters = NWParameters(tls: nil, tcp: tcp)
         parameters.includePeerToPeer = true
         parameters.allowLocalEndpointReuse = true
         return parameters
-    }()
+    }
 }
 
 @MainActor
@@ -20,6 +24,9 @@ final class ConnectionChannel {
 
     private var assembler = MessageAssembler()
     private var isReceiving = false
+    private var isStopping = false
+    private var didFinish = false
+    private var didBecomeReady = false
 
     init(connection: NWConnection) {
         self.connection = connection
@@ -32,41 +39,55 @@ final class ConnectionChannel {
             }
         }
         connection.start(queue: .main)
-        receive()
     }
 
     func send(_ message: NetworkMessage) {
+        guard !isStopping else { return }
         do {
             let data = try MessageAssembler.frame(message)
             connection.send(content: data, completion: .contentProcessed { _ in })
         } catch {
-            onFailed?(error.localizedDescription)
+            fail(error.localizedDescription)
         }
     }
 
     func cancel() {
+        isStopping = true
+        onMessage = nil
+        onReady = nil
+        onFailed = nil
+        connection.stateUpdateHandler = nil
         connection.cancel()
     }
 
     private func handle(_ state: NWConnection.State) {
         switch state {
         case .ready:
+            guard !didBecomeReady else { return }
+            didBecomeReady = true
+            receive()
             onReady?()
         case .failed(let error):
-            onFailed?(error.localizedDescription)
+            fail(error.localizedDescription)
         case .cancelled:
-            onFailed?("Disconnected")
+            fail("Disconnected")
         default:
             break
         }
     }
 
+    private func fail(_ message: String) {
+        guard !didFinish, !isStopping else { return }
+        didFinish = true
+        onFailed?(message)
+    }
+
     private func receive() {
-        guard !isReceiving else { return }
+        guard !isReceiving, !didFinish, !isStopping else { return }
         isReceiving = true
         connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, isComplete, error in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, !self.isStopping else { return }
                 self.isReceiving = false
                 if let data, !data.isEmpty {
                     do {
@@ -74,16 +95,16 @@ final class ConnectionChannel {
                             self.onMessage?(message)
                         }
                     } catch {
-                        self.onFailed?(error.localizedDescription)
+                        self.fail(error.localizedDescription)
                         return
                     }
                 }
                 if let error {
-                    self.onFailed?(error.localizedDescription)
+                    self.fail(error.localizedDescription)
                     return
                 }
                 if isComplete {
-                    self.onFailed?("Disconnected")
+                    self.fail("Disconnected")
                     return
                 }
                 self.receive()
