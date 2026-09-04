@@ -30,6 +30,9 @@ final class LaneScene {
 
     func apply(_ commit: ThrowCommit) {
         resetBallPose()
+        var start = LaneMetrics.ballStart
+        start.x = max(-0.38, min(0.38, Float(commit.approachOffset)))
+        ball.position = start
         let velocity = ThrowMapper.laneVelocity(from: commit)
         ball.components.set(
             PhysicsMotionComponent(
